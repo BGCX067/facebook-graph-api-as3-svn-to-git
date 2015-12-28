@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+	
+	Justin Windle | ANT Build file | V1.0
+	
+	Remember to set 'Run in same JRE as workspace'
+
+	Run > External Tools > External Tool Configurations > JRE > 'Run in the same JRE as the workspace'
+
+-->
+
+<project name="Facebook Graph API Build" default="compile.launch.browser">
+
+	<property file="build.properties" />
+
+	<taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+	<taskdef resource="net/sf/antcontrib/antlib.xml" />
+
+	<!--
+		
+		Setup project structure
+		
+	-->
+
+	<target name="project.setup" description="Creates the project directory structure and imports code libraries and templates">
+		<echo message="Creating project structure" />
+		<delete dir="html-template" />
+		<mkdir dir="${folder.src}" />
+		<mkdir dir="${folder.src_lib}" />
+		<mkdir dir="${folder.bin}" />
+		<mkdir dir="${folder.lib}" />
+		<mkdir dir="${folder.lib}/swc" />
+		<for list="${import.libs}" param="dir">
+			<sequential>
+				<copy todir="${import.path}" overwrite="true">
+					<fileset dir="${lib.path}/@{dir}" includes="**/*.as,**/.swc" />
+				</copy>
+			</sequential>
+		</for>
+		<copy todir="${import.path}" overwrite="true">
+			<fileset dir="${lib.html}/src" />
+		</copy>
+		<copy todir="html-template" overwrite="true">
+			<fileset dir="${lib.html}/html-template" />
+		</copy>
+	</target>
+
+	<!--
+			
+		Copy the HTML template to a directory and populate variables
+			
+	-->
+
+	<macrodef name="copyTemplate" description="Copies the html template to the bin folder and populates empty variables">
+		<attribute name="destination" default="${folder.bin}" />
+		<sequential>
+			<property name="vars.raw" value="${swf.flashVars}" />
+			<propertyregex property="vars.joiner" input="${vars.raw}" regexp="&amp;" replace="," />
+			<propertyregex property="vars.values" input="${vars.joiner}" regexp="=" replace=":" />
+			<propertyregex property="vars.formatted" input="${vars.values}" regexp=":(\w+)" replace=":'\1'" />
+			<copy todir="@{destination}" overwrite="true">
+				<fileset dir="html-template" />
+				<filterset>
+					<filter token="ID" value="${swf.id}" />
+					<filter token="NAME" value="${swf.name}" />
+					<filter token="MENU" value="${swf.menu}" />
+					<filter token="SCALE" value="${swf.scale}" />
+					<filter token="ALIGN" value="${swf.align}" />
+					<filter token="SWF" value="${project.swf}" />
+					<filter token="VARS" value="${swf.flashVars}" />
+					<filter token="TITLE" value="${project.name}" />
+					<filter token="BGCOL" value="${swf.background}" />
+					<filter token="FULLSCREEN" value="${swf.allowFS}" />
+					<filter token="PLAYER" value="${swf.playerVersion}" />
+				</filterset>
+			</copy>
+		</sequential>
+	</macrodef>
+
+	<!--
+			
+		Archive the current project state
+			
+	-->
+
+	<target name="project.archive" description="Creates a time stamped zip file of the projects current state and moves it to the .archive folder">
+		<tstamp>
+			<format property="TIME_NOW" pattern="hh.mm.ss" />
+			<format property="TODAY_UK" pattern="d.MM.yy" locale="en,UK" />
+		</tstamp>
+		<property name="project.time" value="[${TODAY_UK}-${TIME_NOW}]" />
+		<mkdir dir=".archive" />
+		<zip destfile=".archive/${project.time}.zip">
+			<zipfileset dir="." prefix="" excludes="**/.archive/**" />
+		</zip>
+	</target>
+
+	<!--
+				
+		Backup the project
+				
+	-->
+
+	<target name="project.backup" description="Synchronises the project with the corrosponding project in the workspace backup">
+		<property name="sync.source" value="${basedir}" />
+		<propertyregex property="sync.dest" input="${sync.source}" regexp="${workspace.path}" replace="${workspace.backup}" />
+		<sync todir="${sync.dest}" verbose="true">
+			<fileset dir="${basedir}" />
+		</sync>
+	</target>
+
+	<!--
+				
+		Deploy the project to the server
+				
+	-->
+
+	<target name="project.deploy" description="Deploys the project to a server via FTP">
+		<ftp server="${ftp.server}" port="${ftp.port}" remotedir="${ftp.directory}" userid="${ftp.username}" password="${ftp.password}}" passive="no" depends="yes" binary="yes">
+			<fileset dir="${folder.dist}" />
+		</ftp>
+	</target>
+
+	<!--
+	
+		Clean the project
+	
+	-->
+
+	<target name="project.clean" description="Deletes junk files such as .DS_Store from all directories">
+		<delete verbose="true">
+			<fileset dir="." includes="**/.DS_Store" defaultexcludes="false" />
+		</delete>
+	</target>
+
+	<!--
+		
+		Compile the project
+		
+	-->
+
+	<macrodef name="compile" description="Compile using MXMLC">
+		<attribute name="debug" default="true" />
+		<attribute name="optimise" default="false" />
+		<attribute name="destination" default="${folder.bin}" />
+		<sequential>
+			<exec executable="${project.sdk}/${flex.sdk.mxmlc}" failonerror="true">
+				<arg line="${folder.src}/${project.class}" />
+				<arg line="-output '@{destination}/${project.swf}'" />
+				<arg line="-source-path ${folder.src}" />
+				<arg line="-source-path ${folder.src_lib}" />
+				<arg line="-default-frame-rate ${swf.fps}" />
+				<arg line="-default-background-color ${swf.background}" />
+				<arg line="-default-size ${swf.width} ${swf.height}" />
+				<arg line="-compiler.include-libraries ${folder.swc}" />
+				<arg line="-warnings=true" />
+				<arg line="-use-network=${swf.network}" />
+				<arg line="-optimize=@{optimise}" />
+				<arg line="-debug=@{debug}" />
+				<arg line="-strict=true" />
+			</exec>
+		</sequential>
+	</macrodef>
+
+	<!--
+			
+		Compile for debugging
+			
+	-->
+
+	<target name="compile" description="Compiles the project for debugging">
+		<compile debug="true" optimise="false" />
+	</target>
+
+	<!--
+				
+		Compile for release
+				
+	-->
+
+	<target name="compile.release" description="Compiles the project for release">
+		<delete dir="${folder.dist}" />
+		<copy todir="${folder.dist}">
+			<fileset dir="${folder.bin}">
+				<exclude name="${project.swf}" />
+			</fileset>
+		</copy>
+		<compile debug="false" optimise="true" destination="${folder.dist}" />
+		<copyTemplate destination="${folder.dist}" />
+	</target>
+
+	<!--
+				
+		Compile and launch in browser
+				
+	-->
+
+	<target name="compile.launch.browser" description="Compiles the project for debugging and launches it in the browser">
+		<compile debug="true" optimise="false" />
+		<copyTemplate destination="${folder.bin}" />
+	<!-- 	<fdt.startDebugger projectname="${project.name}" savelocation=".launcher" /> -->
+		<exec failonerror="true" executable="open" vmlauncher="true" spawn="false">
+			<arg line="-a '${exe.browser}'" />
+			<arg line="${folder.bin}/index.html" />
+		</exec>
+	</target>
+
+	<!--
+				
+		Compile and launch in player
+				
+	-->
+
+	<target name="compile.launch.player" description="Compiles the project for debugging and launches it in the Flash player">
+		<compile debug="true" optimise="false" />
+		<fdt.startDebugger projectname="${project.name}" savelocation=".launcher" />
+		<exec failonerror="true" executable="open" vmlauncher="true" spawn="false">
+			<arg line="-a '${exe.player}'" />
+			<arg line="${folder.bin}/${project.swf}" />
+		</exec>
+	</target>
+
+	<!--
+		
+		Compile assets
+		
+	-->
+
+	<target name="compile.assets" description="Compiles all FLAs found in the folder.flas directory">
+		<fdt.flashCompile>
+			<fileset dir="${folder.fla}">
+				<include name="**/*.fla" />
+			</fileset>
+		</fdt.flashCompile>
+	</target>
+
+	<!--
+			
+		Backup entire workspace
+		
+	-->
+
+	<target name="workspace.backup" description="Synchronises the entire workspace with the workspace backup">
+		<sync todir="${workspace.backup}" verbose="true">
+			<fileset dir="${workspace.path}" />
+		</sync>
+	</target>
+	
+	<target name="compile.release.server" description="Copies the _server directory and removes svn directives">
+		<copy todir="_upload">
+			<fileset dir="_server"></fileset>
+		</copy>
+	</target>
+
+</project>

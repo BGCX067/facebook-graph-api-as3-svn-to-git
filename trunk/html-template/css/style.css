@@ -1,0 +1,16 @@
+html, body
+{
+	height: 100%;
+	overflow: hidden;
+}
+
+body
+{
+	background: @BGCOL@;
+	margin: 0;
+}
+
+#content
+{
+	height: 100%;
+}
